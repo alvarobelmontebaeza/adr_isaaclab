@@ -1,0 +1,1 @@
+from .adr import KINOVA_BIMANUAL_CFG
