@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import isaaclab.managers.mdp as mdp
+import isaaclab.envs.mdp as mdp
 from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
@@ -39,7 +39,7 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     episode_length_s = 20.0
     # - spaces definition
     action_space = 14  # 7 dof per arm
-    observation_space = 4
+    observation_space = 76
     state_space = 0
     debug_vis = True
 
@@ -63,15 +63,15 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
     # -- Action Parameters --
-    action_scale = 0.5
+    action_scale = 0.25
 
     # -- Command parameters --
-    default_ee_pos_left_offset = (0.5, -0.5, 0.0)
-    default_ee_pos_right_offset = (0.5, 0.5, 0.0)
+    default_ee_pos_left_offset = (0.25, -0.25, 0.0)
+    default_ee_pos_right_offset = (0.25, 0.25, 0.0)
 
-    target_pos_x_range = [-1.5, 1.5]
-    target_pos_y_range = [-1.5, 1.5]
-    target_pos_z_range = [0.5, 1.5]
+    target_pos_x_range = [-0.5, 0.5]
+    target_pos_y_range = [-0.25, 0.25]
+    target_pos_z_range = [-0.5, 0.5]
 
     target_roll_range = [-3.14, 3.14]
     target_pitch_range = [-3.14, 3.14]
@@ -79,13 +79,9 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
 
     # -- Reward parameters --
     # - reward scales
-    rew_scale_alive = 1.0
-    rew_scale_terminated = -2.0
-    rew_scale_pole_pos = -1.0
-    rew_scale_cart_vel = -0.01
-    rew_scale_pole_vel = -0.005
-
-
-    # - reset states/conditions
-    initial_pole_angle_range = [-0.25, 0.25]  # pole angle sample range on reset [rad]
-    max_cart_pos = 3.0  # reset if cart exceeds this position [m]
+    pose_tracking_rew_scale = 10.0
+    base_velocity_rew_scale = -1.0
+    joint_velocity_rew_scale = -1e-3
+    joint_torque_rew_scale = -1e-5
+    action_rate_rew_scale = -0.02
+    collision_rew_scale = -100.0
