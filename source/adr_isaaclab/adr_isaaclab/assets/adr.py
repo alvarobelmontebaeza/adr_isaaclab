@@ -6,7 +6,7 @@ from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 
 KINOVA_BIMANUAL_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path=f"/home/alvaro/adr_isaaclab/adr_isaaclab/assets/data/ADR.usd",
+        usd_path=f"/home/alvaro/adr_isaaclab/source/adr_isaaclab/adr_isaaclab/assets/data/ADR.usd",
         activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
