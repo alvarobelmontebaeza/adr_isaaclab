@@ -66,22 +66,24 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     action_scale = 0.25
 
     # -- Command parameters --
-    default_ee_pos_left_offset = (0.25, -0.25, 0.0)
-    default_ee_pos_right_offset = (0.25, 0.25, 0.0)
+    default_ee_pos_left_offset = (0.45, -0.2345, 0.0)
+    default_ee_pos_right_offset = (0.45, -0.2345, 0.0)
+    default_ee_rot_left_offset = (-1.57, 0.0, 0.0)
+    default_ee_rot_right_offset = (-1.57, 0.0, -3.14)
 
-    target_pos_x_range = [-0.5, 0.5]
+    target_pos_x_range = [-0.25, 0.25]
     target_pos_y_range = [-0.25, 0.25]
     target_pos_z_range = [-0.5, 0.5]
 
-    target_roll_range = [-3.14, 3.14]
-    target_pitch_range = [-3.14, 3.14]
-    target_yaw_range = [-3.14, 3.14]
+    target_roll_range = [-0.785, 0.785] 
+    target_pitch_range = [-0.785, 0.785]
+    target_yaw_range = [-0.785, 0.785]
 
     # -- Reward parameters --
     # - reward scales
     pose_tracking_rew_scale = 10.0
-    base_velocity_rew_scale = -1.0
-    joint_velocity_rew_scale = -1e-3
-    joint_torque_rew_scale = -1e-5
-    action_rate_rew_scale = -0.02
+    base_velocity_rew_scale = -0.0001
+    joint_velocity_rew_scale = -1.e-4
+    joint_torque_rew_scale = -1.e-6
+    action_rate_rew_scale = -1.e-4
     collision_rew_scale = -100.0
