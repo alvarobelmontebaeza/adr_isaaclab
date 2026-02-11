@@ -125,11 +125,6 @@ class AdrIsaaclabEnv(DirectRLEnv):
 
         # Get current EE poses
         self.update_current_ee_poses() # Retrieves current EE poses in world frame and converts to base frame
-        current_left_ee_pose_b = self.ee_pose_left_b
-        current_right_ee_pose_b = self.ee_pose_right_b
-        # Get target EE poses
-        target_left_ee_pose_b = self._target_ee_pose_left_b
-        target_right_ee_pose_b = self._target_ee_pose_right_b
         # Last actions
         actions = self._previous_actions
 
@@ -139,10 +134,10 @@ class AdrIsaaclabEnv(DirectRLEnv):
                 base_angular_vel, #3
                 self.joint_pos, #14
                 self.joint_vel, #14
-                current_left_ee_pose_b, #7
-                current_right_ee_pose_b, #7
-                target_left_ee_pose_b,# 7
-                target_right_ee_pose_b,# 7
+                self.ee_pose_left_b, #7
+                self.ee_pose_right_b, #7
+                self._target_ee_pose_left_b,# 7
+                self._target_ee_pose_right_b,# 7
                 actions, # 14
             ),
             dim=-1, # Total: 76
@@ -317,9 +312,9 @@ class AdrIsaaclabEnv(DirectRLEnv):
         # Sample target orientation in Euler angles and convert to quaternions
         # Left arm
         euler_angles = torch.zeros_like(self._target_ee_pose_left_b[env_ids, :3])
-        euler_angles[:, 0] = r.uniform_(*self.cfg.target_roll_range)
-        euler_angles[:, 1] = r.uniform_(*self.cfg.target_pitch_range)
-        euler_angles[:, 2] = r.uniform_(*self.cfg.target_yaw_range)
+        euler_angles[:, 0] = r.uniform_(*self.cfg.target_roll_range) + self.cfg.default_ee_rot_left_offset[0]
+        euler_angles[:, 1] = r.uniform_(*self.cfg.target_pitch_range) + self.cfg.default_ee_rot_left_offset[1]
+        euler_angles[:, 2] = r.uniform_(*self.cfg.target_yaw_range) + self.cfg.default_ee_rot_left_offset[2]
         self._target_ee_pose_left_b[env_ids, 3:] = quat_from_euler_xyz(euler_angles[:, 0], euler_angles[:, 1], euler_angles[:, 2])
         if make_quat_unique:
             self._target_ee_pose_left_b[env_ids, 3:] = quat_unique(self._target_ee_pose_left_b[env_ids, 3:])
@@ -328,9 +323,9 @@ class AdrIsaaclabEnv(DirectRLEnv):
 
         # Right arm
         euler_angles = torch.zeros_like(self._target_ee_pose_right_b[env_ids, :3])
-        euler_angles[:, 0] = r.uniform_(*self.cfg.target_roll_range)
-        euler_angles[:, 1] = r.uniform_(*self.cfg.target_pitch_range)
-        euler_angles[:, 2] = r.uniform_(*self.cfg.target_yaw_range)
+        euler_angles[:, 0] = r.uniform_(*self.cfg.target_roll_range) + self.cfg.default_ee_rot_right_offset[0]
+        euler_angles[:, 1] = r.uniform_(*self.cfg.target_pitch_range) + self.cfg.default_ee_rot_right_offset[1]
+        euler_angles[:, 2] = r.uniform_(*self.cfg.target_yaw_range) + self.cfg.default_ee_rot_right_offset[2]
         self._target_ee_pose_right_b[env_ids, 3:] = quat_from_euler_xyz(euler_angles[:, 0], euler_angles[:, 1], euler_angles[:, 2])
         if make_quat_unique:
             self._target_ee_pose_right_b[env_ids, 3:] = quat_unique(self._target_ee_pose_right_b[env_ids, 3:])
@@ -399,20 +394,20 @@ class AdrIsaaclabEnv(DirectRLEnv):
     '''
     def _compute_pose_tracking_reward(self, sigma_pos: float = 0.1, sigma_quat: float = 0.1):
         # Compute pose tracking reward based on distance between current EE pose and target EE pose
-        pos_error_left = torch.norm(self.ee_pose_left_b[:, :3] - self._target_ee_pose_left_b[:, :3], dim=-1)
-        pos_error_right = torch.norm(self.ee_pose_right_b[:, :3] - self._target_ee_pose_right_b[:, :3], dim=-1)
-        quat_error_left = quat_error_magnitude(self.ee_pose_left_b[:, 3:], self._target_ee_pose_left_b[:, 3:])
-        quat_error_right = quat_error_magnitude(self.ee_pose_right_b[:, 3:], self._target_ee_pose_right_b[:, 3:])
+        pos_error_left = torch.norm(self._robot.data.body_com_pose_w[:, self._left_ee_id, :3].squeeze(1) - self._target_ee_pose_left_w[:, :3], dim=-1)
+        pos_error_right = torch.norm(self._robot.data.body_com_pose_w[:, self._right_ee_id, :3].squeeze(1) - self._target_ee_pose_right_w[:, :3], dim=-1)
+        quat_error_left = quat_error_magnitude(self._robot.data.body_com_pose_w[:, self._left_ee_id, 3:].squeeze(1), self._target_ee_pose_left_w[:, 3:])
+        quat_error_right = quat_error_magnitude(self._robot.data.body_com_pose_w[:, self._right_ee_id, 3:].squeeze(1), self._target_ee_pose_right_w[:, 3:])
         
         # Compute the position and orientation rewards for each arm
-        left_pos_reward = torch.exp(-pos_error_left / sigma_pos)
-        left_rot_reward = torch.exp(-quat_error_left / sigma_quat)
-        right_pos_reward = torch.exp(-pos_error_right / sigma_pos)
-        right_rot_reward = torch.exp(-quat_error_right / sigma_quat)
+        left_pos_reward = 1.0 - torch.tanh(pos_error_left / sigma_pos)
+        left_rot_reward = 1.0 - torch.tanh(quat_error_left / sigma_quat)
+        right_pos_reward = 1.0 - torch.tanh(pos_error_right / sigma_pos)
+        right_rot_reward = 1.0 - torch.tanh(quat_error_right / sigma_quat)
 
         # Compute per-arm reward
-        left_arm_reward = left_pos_reward * left_rot_reward
-        right_arm_reward = right_pos_reward * right_rot_reward        
+        left_arm_reward = left_pos_reward + left_rot_reward
+        right_arm_reward = right_pos_reward + right_rot_reward        
         
         return left_arm_reward + right_arm_reward
 
