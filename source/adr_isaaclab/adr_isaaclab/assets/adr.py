@@ -24,13 +24,20 @@ KINOVA_BIMANUAL_CFG = ArticulationCfg(
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.0),
         joint_pos={
-            ".*joint_1": 0.0, #base rotation 
-            ".*joint_2": 0.7854,# shoulder
-            ".*joint_3": 0.0, #half arm 1
-            ".*joint_4": 1.5708, #half arm 2
-            ".*joint_5": 0.0, #forearm
-            ".*joint_6": 0.2618, #wrist 1
-            ".*joint_7": 0.0, #wrist 2
+            ".*right_joint_1": 0.0, #base rotation 
+            ".*right_joint_2": 0.7854,# shoulder
+            ".*right_joint_3": 0.0, #half arm 1
+            ".*right_joint_4": 1.5708, #half arm 2
+            ".*right_joint_5": 0.0, #forearm
+            ".*right_joint_6": 0.2618, #wrist 1
+            ".*right_joint_7": 0.0, #wrist 2
+            ".*left_joint_1": 0.0, #base rotation
+            ".*left_joint_2": -0.7854,# shoulder
+            ".*left_joint_3": 0.0, #half arm 1
+            ".*left_joint_4": -1.5708, #half arm 2
+            ".*left_joint_5": 0.0, #forearm
+            ".*left_joint_6": -0.2618, #wrist 1
+            ".*left_joint_7": 0.0, #wrist 2
         },
         joint_vel={".*": 0.0},
     ),
