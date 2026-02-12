@@ -1,5 +1,5 @@
 import isaaclab.sim as sim_utils
-from isaaclab.actuators import ActuatorNetMLPCfg, DCMotorCfg, ImplicitActuatorCfg
+from isaaclab.actuators import ActuatorNetMLPCfg, DCMotorCfg, ImplicitActuatorCfg, IdealPDActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 
@@ -44,27 +44,27 @@ KINOVA_BIMANUAL_CFG = ArticulationCfg(
     soft_joint_pos_limit_factor=0.95,
     actuators={
         # Data retrieved from: https://www.kinovarobotics.com/uploads/User-Guide-Gen3-R07.pdf
-        "large": ImplicitActuatorCfg(
+        "large": IdealPDActuatorCfg(
             joint_names_expr=[".*joint_1", ".*joint_2", ".*joint_3", ".*joint_4"],
-            effort_limit_sim={
+            effort_limit={
                 ".*joint_1": 39.0, #Nm
                 ".*joint_2": 39.0,
                 ".*joint_3": 39.0,
                 ".*joint_4": 39.0,
             },
-            velocity_limit_sim=1.39, #rad/s
-            stiffness=80.0,
+            velocity_limit=1.39, #rad/s
+            stiffness=20.0,
             damping=1.0,
         ),
-        "small": ImplicitActuatorCfg(
+        "small": IdealPDActuatorCfg(
             joint_names_expr=[".*joint_5", ".*joint_6", ".*joint_7",],
-            effort_limit_sim={
-                ".*joint_5": 9.0, #Nm
-                ".*joint_6": 9.0,
-                ".*joint_7": 9.0,
+            effort_limit={
+                ".*joint_5": 13.0, #Nm
+                ".*joint_6": 13.0,
+                ".*joint_7": 13.0,
             },
-            velocity_limit_sim=1.22, #rad/s
-            stiffness=20.0,
+            velocity_limit=1.22, #rad/s
+            stiffness=5.0,
             damping=0.5,
         ),
     },
