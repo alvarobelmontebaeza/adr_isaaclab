@@ -392,7 +392,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
     '''
     Custom functions for reward computation
     '''
-    def _compute_pose_tracking_reward(self, sigma_pos: float = 0.1, sigma_quat: float = 0.1):
+    def _compute_pose_tracking_reward(self, sigma_pos: float = 0.1, sigma_quat: float = 0.5):
         # Compute pose tracking reward based on distance between current EE pose and target EE pose
         pos_error_left = torch.norm(self._robot.data.body_com_pose_w[:, self._left_ee_id, :3].squeeze(1) - self._target_ee_pose_left_w[:, :3], dim=-1)
         pos_error_right = torch.norm(self._robot.data.body_com_pose_w[:, self._right_ee_id, :3].squeeze(1) - self._target_ee_pose_right_w[:, :3], dim=-1)
@@ -400,14 +400,14 @@ class AdrIsaaclabEnv(DirectRLEnv):
         quat_error_right = quat_error_magnitude(self._robot.data.body_com_pose_w[:, self._right_ee_id, 3:].squeeze(1), self._target_ee_pose_right_w[:, 3:])
         
         # Compute the position and orientation rewards for each arm
-        left_pos_reward = 1.0 - torch.tanh(pos_error_left / sigma_pos)
+        left_pos_reward = 1.0 - torch.tanh(torch.square(pos_error_left / sigma_pos))
         left_rot_reward = 1.0 - torch.tanh(quat_error_left / sigma_quat)
-        right_pos_reward = 1.0 - torch.tanh(pos_error_right / sigma_pos)
+        right_pos_reward = 1.0 - torch.tanh(torch.square(pos_error_right / sigma_pos))
         right_rot_reward = 1.0 - torch.tanh(quat_error_right / sigma_quat)
 
         # Compute per-arm reward
-        left_arm_reward = left_pos_reward + left_rot_reward
-        right_arm_reward = right_pos_reward + right_rot_reward        
+        left_arm_reward = left_pos_reward * left_rot_reward
+        right_arm_reward = right_pos_reward * right_rot_reward        
         
         return left_arm_reward + right_arm_reward
 
