@@ -73,7 +73,7 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
 
     target_pos_x_range = [-0.25, 0.25]
     target_pos_y_range = [-0.25, 0.25]
-    target_pos_z_range = [-0.5, 0.5]
+    target_pos_z_range = [-0.4, 0.4]
 
     target_roll_range = [-0.523, 0.523] # +/- 30 degrees
     target_pitch_range = [-0.523, 0.523] 
@@ -82,6 +82,9 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     # -- Reward parameters --
     # - reward scales
     pose_tracking_rew_scale = 10.0
+    sigma_pos = 0.1
+    sigma_quat = 0.5
+
     base_velocity_rew_scale = -0.1
     joint_velocity_rew_scale = -1e-3
     joint_torque_rew_scale = -1e-6
