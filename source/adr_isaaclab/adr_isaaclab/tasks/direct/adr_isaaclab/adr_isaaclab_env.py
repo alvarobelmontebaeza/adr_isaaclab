@@ -150,7 +150,10 @@ class AdrIsaaclabEnv(DirectRLEnv):
 
     def _get_rewards(self) -> torch.Tensor:
         # Task rewards
-        pose_tracking_reward = self._compute_pose_tracking_reward()
+        pose_tracking_reward = self._compute_pose_tracking_reward(
+            sigma_pos=self.cfg.sigma_pos,
+            sigma_quat=self.cfg.sigma_quat
+        )
 
         # Regularization rewards
         # Base velocity penalty to avoid body drift due to arms coupled motion
