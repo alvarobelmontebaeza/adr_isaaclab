@@ -14,8 +14,8 @@ from isaaclab_rl.rsl_rl import (
 @configclass
 class PPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 1000
-    save_interval = 50
+    max_iterations = 2000
+    save_interval = 100
     experiment_name = "adr_ppo"
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
