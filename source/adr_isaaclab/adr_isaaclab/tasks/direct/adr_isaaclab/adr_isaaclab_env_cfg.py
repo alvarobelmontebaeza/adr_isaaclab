@@ -4,7 +4,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import isaaclab.envs.mdp as mdp
-from isaaclab.assets import ArticulationCfg
+import isaaclab.sim as sim_utils
+from isaaclab.assets import ArticulationCfg, RigidObjectCfg
 from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
@@ -30,6 +31,7 @@ from adr_isaaclab.assets.adr import KINOVA_BIMANUAL_CFG
 #         },
 #     )
 
+
 @configclass
 class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     # env
@@ -38,10 +40,10 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     policy_dt = physics_dt * decimation
     episode_length_s = 20.0
     # - spaces definition
-    action_space = 14  # 7 dof per arm
-    observation_space = 76
+    action_space = 14+3+3  # 7 dof per arm + thruster commands + torque commands
+    observation_space = 66
     state_space = 0
-    debug_vis = True
+    debug_vis = False
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
@@ -59,11 +61,38 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
         track_air_time=False,
     )
 
+    # -- Target satellite configuration --
+    target_cfg = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/Target",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=f"/home/alvaro/adr_isaaclab/source/adr_isaaclab/adr_isaaclab/assets/data/target_satellite.usd",
+            activate_contact_sensors=True,
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                kinematic_enabled=False,
+                disable_gravity=False,
+                enable_gyroscopic_forces=True,
+                solver_position_iteration_count=8,
+                solver_velocity_iteration_count=0,
+                sleep_threshold=0.005,
+                stabilization_threshold=0.0025,
+                max_depenetration_velocity=1.0,
+            ),
+            mass_props=sim_utils.MassPropertiesCfg(mass=30.0),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(
+            lin_vel=(0.0, 0.0, 0.0),
+            ang_vel=(0.0, 0.0, 0.0), 
+            pos=(0.44581, 0.00206, -0.03), 
+            rot=(1.0, 0.0, 0.0, 0.0),
+        ),
+    )
     # scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
     # -- Action Parameters --
-    action_scale = 0.25
+    arm_action_scale = 0.05
+    thruster_scale = 10.0
+    torque_scale = 5.0
 
     # -- Command parameters --
     default_ee_pos_left_offset = (0.45, 0.2345, 0.0)
@@ -71,22 +100,31 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     default_ee_rot_left_offset = (-1.57, -3.14, -3.14)
     default_ee_rot_right_offset = (-1.57, 3.14, 0.0)
 
-    target_pos_x_range = [-0.25, 0.25]
-    target_pos_y_range = [-0.25, 0.25]
-    target_pos_z_range = [-0.4, 0.4]
-
-    target_roll_range = [-0.523, 0.523] # +/- 30 degrees
-    target_pitch_range = [-0.523, 0.523] 
-    target_yaw_range = [-0.523, 0.523]
+    # Capture velocity ranges
+    target_lin_vel_ranges = {
+        "x": (-0.0, 0.0),  # m/s
+        "y": (-0.0, 0.0),  # m/s
+        "z": (-0.0, 0.0),  # m/s
+    }
+    target_ang_vel_ranges = {
+        "roll": (-0.0, 0.0),  # rad/s
+        "pitch": (-0.0, 0.0),  # rad/s
+        "yaw": (-0.0, 0.0),  # rad/s
+    }
 
     # -- Reward parameters --
     # - reward scales
-    pose_tracking_rew_scale = 10.0
-    sigma_pos = 0.1
-    sigma_quat = 0.5
-
-    base_velocity_rew_scale = -0.1
-    joint_velocity_rew_scale = -1e-3
-    joint_torque_rew_scale = -1e-6
-    action_rate_rew_scale = -2e-2
+    # Task rewards
+    target_linear_vel_rew_scale = 2.0
+    target_angular_vel_rew_scale = 5.0
+    base_linear_velocity_rew_scale = 2.0
+    base_angular_velocity_rew_scale = 4.0
+    # Regularization rewards
+    arm_deviation_rew_scale = -1.0 #-1.0
+    joint_velocity_rew_scale = -1e-2
+    joint_torque_rew_scale = -1e-4
+    arm_action_rate_rew_scale = -5e-2 #-5e-2
+    thruster_action_rate_rew_scale = -1e-2 #-1e-3
+    torque_action_rate_rew_scale = -1e-2
+    fuel_consumption_rew_scale = 0.0 #-1e-2
     collision_rew_scale = -100.0
