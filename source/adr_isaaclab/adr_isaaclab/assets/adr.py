@@ -18,7 +18,7 @@ KINOVA_BIMANUAL_CFG = ArticulationCfg(
             max_depenetration_velocity=1.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=False, solver_position_iteration_count=4, solver_velocity_iteration_count=0
+            enabled_self_collisions=False, solver_position_iteration_count=8, solver_velocity_iteration_count=0
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
@@ -38,35 +38,42 @@ KINOVA_BIMANUAL_CFG = ArticulationCfg(
             ".*left_joint_5": 0.0, #forearm
             ".*left_joint_6": -0.2618, #wrist 1
             ".*left_joint_7": 0.0, #wrist 2
+            "finger_joint": 0.525,
+            "finger_joint_0": 0.525,
         },
         joint_vel={".*": 0.0},
     ),
-    soft_joint_pos_limit_factor=0.95,
     actuators={
         # Data retrieved from: https://www.kinovarobotics.com/uploads/User-Guide-Gen3-R07.pdf
-        "large": IdealPDActuatorCfg(
+        "large": ImplicitActuatorCfg(
             joint_names_expr=[".*joint_1", ".*joint_2", ".*joint_3", ".*joint_4"],
-            effort_limit={
+            effort_limit_sim={
                 ".*joint_1": 39.0, #Nm
                 ".*joint_2": 39.0,
                 ".*joint_3": 39.0,
                 ".*joint_4": 39.0,
             },
-            velocity_limit=1.39, #rad/s
+            velocity_limit_sim=1.39, #rad/s
             stiffness=20.0,
             damping=1.0,
         ),
-        "small": IdealPDActuatorCfg(
+        "small": ImplicitActuatorCfg(
             joint_names_expr=[".*joint_5", ".*joint_6", ".*joint_7",],
-            effort_limit={
+            effort_limit_sim={
                 ".*joint_5": 13.0, #Nm
                 ".*joint_6": 13.0,
                 ".*joint_7": 13.0,
             },
-            velocity_limit=1.22, #rad/s
+            velocity_limit_sim=1.22, #rad/s
             stiffness=5.0,
             damping=0.5,
         ),
+        "gripper": ImplicitActuatorCfg(
+            joint_names_expr=[".*finger_joint", ".*finger_joint_0"],
+            effort_limit_sim=26.0, #N
+            stiffness=3.0,
+            damping=0.0026,
+        )
     },
 )
 """Configuration for the dual-arm Kinova Gen3 robots in Isaac Lab."""
