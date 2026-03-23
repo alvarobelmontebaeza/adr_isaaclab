@@ -85,7 +85,9 @@ import matplotlib.pyplot as plt
 def plot_velocity(velocity_buff, title):
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 1, 1)
+    plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
     plt.plot(velocity_buff[:, :3].cpu().numpy())
+    # plt.ylim(bottom=-0.1, top=0.1)
     plt.title(f"{title} Linear Velocity")
     plt.xlabel("Timestep")
     plt.ylabel("Linear Velocity (m/s)")
@@ -93,8 +95,10 @@ def plot_velocity(velocity_buff, title):
     plt.grid()
 
     plt.subplot(2, 1, 2)
+    plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
     plt.plot(velocity_buff[:, 3:].cpu().numpy())
     plt.title(f"{title} Angular Velocity")
+    # plt.ylim(bottom=-0.1, top=0.1)
     plt.xlabel("Timestep")
     plt.ylabel("Angular Velocity (rad/s)")
     plt.legend(["Roll", "Pitch", "Yaw"])
@@ -106,6 +110,7 @@ def plot_velocity(velocity_buff, title):
 def plot_base_forces(thruster_cmd_buff, torque_cmd_buff):
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 1, 1)
+    plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
     plt.plot(thruster_cmd_buff.cpu().numpy())
     plt.title("Thruster Commands")
     plt.xlabel("Timestep")
@@ -114,6 +119,7 @@ def plot_base_forces(thruster_cmd_buff, torque_cmd_buff):
     plt.grid()
 
     plt.subplot(2, 1, 2)
+    plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
     plt.plot(torque_cmd_buff.cpu().numpy())
     plt.title("Reaction Torque Commands")
     plt.xlabel("Timestep")
@@ -218,6 +224,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     dt = env.unwrapped.step_dt
 
+    # Remove curriculum for testing
+    env.unwrapped.max_curriculum_steps = 1
+
     # reset environment
     obs = env.get_observations()
     timestep = 0
@@ -243,16 +252,16 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             # Data logging for debugging and analysis
             target_vel_buff[:, timestep, :3] = env.unwrapped._target.data.root_link_vel_w[:, :3]
             target_vel_buff[:, timestep, 3:] = env.unwrapped._target.data.root_link_vel_w[:, 3:]
-            base_vel_buff[:, timestep, :3] = env.unwrapped._robot.data.root_lin_vel_b
-            base_vel_buff[:, timestep, 3:] = env.unwrapped._robot.data.root_ang_vel_b
+            base_vel_buff[:, timestep, :3] = env.unwrapped._robot.data.root_link_vel_w[:, :3]
+            base_vel_buff[:, timestep, 3:] = env.unwrapped._robot.data.root_link_vel_w[:, 3:]
 
-            thruster_cmd_buff[:, timestep, :] = env.unwrapped._desired_thruster_forces[:, 0, :] # Assuming last 6 actions are for thrusters and torques
-            torque_cmd_buff[:, timestep, :] = env.unwrapped._desired_reaction_torques[:, 0, :]
+            thruster_cmd_buff[:, timestep, :] = env.unwrapped._applied_thruster_forces[:, 0, :] # Assuming last 6 actions are for thrusters and torques
+            torque_cmd_buff[:, timestep, :] = env.unwrapped._applied_reaction_torques[:, 0, :]
 
             timestep += 1
             print(f"[INFO] Timestep: {timestep} / {env.unwrapped.max_episode_length}", end="\r")
 
-        if timestep >= env.unwrapped.max_episode_length:
+        if timestep >= env.unwrapped.max_episode_length - 1:
             print(f"[INFO] Episode finished after {timestep} steps. Resetting environment.")
             break
         
