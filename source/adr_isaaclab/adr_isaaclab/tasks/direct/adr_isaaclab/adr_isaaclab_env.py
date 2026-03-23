@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 import isaaclab.sim as sim_utils
 import torch
+import torch.nn.functional as F
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.sensors import ContactSensor
 from isaaclab.envs import DirectRLEnv
@@ -36,10 +37,14 @@ class AdrIsaaclabEnv(DirectRLEnv):
         self._arm_action_scale = torch.tensor(self.cfg.arm_action_scale, device=self.device)
         self._thruster_scale = torch.tensor(self.cfg.thruster_scale, device=self.device)
         self._torque_scale = torch.tensor(self.cfg.torque_scale, device=self.device)
+        self._thruster_dynamics_alpha = self.step_dt / (self.step_dt + self.cfg.thruster_time_constant)
+
         # Action: Target joint positions + thruster commands + torque commands
         self._target_joint_pos = torch.zeros((self.num_envs, 14), device=self.device)
         self._desired_thruster_forces = torch.zeros((self.num_envs, 1, 3), device=self.device)
+        self._applied_thruster_forces = torch.zeros_like(self._desired_thruster_forces)
         self._desired_reaction_torques = torch.zeros((self.num_envs, 1, 3), device=self.device)
+        self._applied_reaction_torques = torch.zeros_like(self._desired_reaction_torques)
 
         # Buffers for end-effector poses
         self.ee_pose_left_w = torch.zeros((self.num_envs, 7), device=self.device)  # (x, y, z, qw, qx, qy, qz)
@@ -60,6 +65,15 @@ class AdrIsaaclabEnv(DirectRLEnv):
         self._target_ee_pose_left_w = torch.zeros((self.num_envs, 7), device=self.device)
         self._target_ee_pose_right_w = torch.zeros((self.num_envs, 7), device=self.device)
 
+        # -- Curriculum learning parameters --
+        self.global_step_counter = 0
+        self.max_learning_epochs = 2000
+        self.max_curriculum_steps = int(self.cfg.max_curriculum_factor * self.max_learning_epochs * self.num_envs * 24)
+        self.curriculum_factor = 0.0
+        self.max_lin_vel = 0.0
+        self.max_ang_vel = 0.0
+
+
         
         # Logging
         self._episode_sums = {
@@ -69,6 +83,14 @@ class AdrIsaaclabEnv(DirectRLEnv):
                 "target_angular_vel",
                 "base_linear_velocity",
                 "base_angular_velocity",
+                "target_linear_vel_fine_grained",
+                "target_angular_vel_fine_grained",
+                "base_linear_vel_fine_grained",
+                "base_angular_vel_fine_grained",
+                "target_lin_acc",
+                "target_ang_acc",
+                "base_lin_acc",
+                "base_ang_acc",
                 "arm_deviation",
                 "joint_velocity",
                 "joint_torque",
@@ -85,6 +107,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
         self._left_ee_id, _ = self._robot.find_bodies(".*gen3n7_left_end_effector_link")
         self._right_ee_id, _ = self._robot.find_bodies(".*gen3n7_right_end_effector_link")
         self._undesired_collision_body_ids, _ = self._contact_sensor.find_bodies([".*base", ".*link"])
+        self._target_base_id, _ = self._target.find_bodies(".*Target")
         # Arm joint indices
         self._left_arm_joint_ids, _ = self._robot.find_joints(".*left_joint_.*")
         self._right_arm_joint_ids, _ = self._robot.find_joints(".*right_joint_.*")
@@ -116,21 +139,28 @@ class AdrIsaaclabEnv(DirectRLEnv):
         light_cfg.func("/World/Light", light_cfg)
 
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
+        # Update step counter for curriculum learning
+        self.global_step_counter += self.num_envs
+
+        # Retrieve raw actions and apply scaling and processing to obtain target joint positions, thruster forces, and reaction torques
         self._actions = actions.clone()
         # Parse actions to be: [target_joint_pos, thruster_commands, torque_commands]
         self.arm_actions = self._actions[:, :14]
-        self.thruster_actions = self._actions[:, 14:14+3]
-        self.torque_actions = self._actions[:, 14+3:]
+        self.thruster_actions = self._actions[:, 14:14 + 3]
+        self.torque_actions = self._actions[:, 14 + 3:]
         # apply scaling and add to default joint positions to obtain processed actions as target joint positions
+        # Residual Joint Control
         self._target_joint_pos = self.arm_actions * self._arm_action_scale + self._robot.data.default_joint_pos[:, self._arm_joint_ids]
+        # Delta joint control
+        # self._target_joint_pos = self.arm_actions * self._arm_action_scale + self._robot.data.joint_pos[:, self._arm_joint_ids]
         # Scale thruster and torque actions
         self._desired_thruster_forces[:, 0, :] = self.thruster_actions.clamp(-1.0, 1.0) * self._thruster_scale
         self._desired_reaction_torques[:, 0, :] = self.torque_actions.clamp(-1.0, 1.0) * self._torque_scale
-
-        #print(f"Raw thruster actions: {thruster_actions[0].cpu().numpy()}, Scaled thruster forces: {self._desired_thruster_forces[0, 0].cpu().numpy()}")
-        #print(f"Raw torque actions: {torque_actions[0].cpu().numpy()}, Scaled reaction torques: {self._desired_reaction_torques[0, 0].cpu().numpy()}")
-
-
+        # Apply first order dynamics
+        prev_thruster_forces = self._applied_thruster_forces.clone()
+        prev_reaction_torques = self._applied_reaction_torques.clone()
+        self._applied_thruster_forces = prev_thruster_forces * (1 - self._thruster_dynamics_alpha) + self._thruster_dynamics_alpha * self._desired_thruster_forces
+        self._applied_reaction_torques = prev_reaction_torques * (1 - self._thruster_dynamics_alpha) + self._thruster_dynamics_alpha * self._desired_reaction_torques
         # Inject target motion at the beginning of each episode after reset
         self.update_target_motion()
 
@@ -142,8 +172,8 @@ class AdrIsaaclabEnv(DirectRLEnv):
         self._robot.set_joint_position_target(1.0, joint_ids=[self._right_gripper_joint_id])
         # Thrust and reaction torques
         self._robot.set_external_force_and_torque(
-            forces=self._desired_thruster_forces,
-            torques=self._desired_reaction_torques,
+            forces=self._applied_thruster_forces,
+            torques=self._applied_reaction_torques,
             body_ids=self._base_id
         )
         self._robot.write_data_to_sim()
@@ -159,6 +189,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
         # Target twist
         target_linear_vel_w = self._target.data.root_link_vel_w[:, :3]
         target_angular_vel_w = self._target.data.root_link_vel_w[:, 3:]
+
         # Transform target velocities to body frame
         target_lin_vel_b = quat_apply(base_rot_w_conj, target_linear_vel_w)
         target_ang_vel_b = quat_apply(base_rot_w_conj, target_angular_vel_w)
@@ -201,18 +232,49 @@ class AdrIsaaclabEnv(DirectRLEnv):
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
-        # Task rewards
-        sigma_lin_squared = 0.25 ** 2
-        sigma_ang_squared = 0.50 ** 2
+        # -- Task rewards
+        sigma_lin_squared = self.cfg.lin_rew_sigma ** 2
+        sigma_ang_squared = self.cfg.ang_rew_sigma ** 2
         # Stabilize target
         target_velocity = self._target.data.root_link_vel_w
         target_lin_vel_penalty = torch.exp(-torch.sum(torch.square(target_velocity[:, :3]), dim=-1) / sigma_lin_squared)
         target_ang_vel_penalty = torch.exp(-torch.sum(torch.square(target_velocity[:, 3:]), dim=-1) / sigma_ang_squared)
-
-        # Regularization rewards
         # Base velocity penalty to encourage stability
-        base_linear_vel_penalty = torch.exp(-torch.sum(torch.square(self._robot.data.root_lin_vel_b), dim=-1) / sigma_lin_squared)
-        base_angular_vel_penalty = torch.exp(-torch.sum(torch.square(self._robot.data.root_ang_vel_b), dim=-1) / sigma_ang_squared)
+        base_velocity = self._robot.data.root_com_vel_w
+        base_linear_vel_penalty = torch.exp(-torch.sum(torch.square(base_velocity[:, :3]), dim=-1) / sigma_lin_squared)
+        base_angular_vel_penalty = torch.exp(-torch.sum(torch.square(base_velocity[:, 3:]), dim=-1) / sigma_ang_squared)
+
+        # -- Regularization rewards
+        # L1 rewards to encourage fine-grained tracking of target velocities and stability
+        # target_lin_vel_fine_grained = torch.linalg.vector_norm(target_velocity[:, :3], ord=1, dim=-1)
+        # target_ang_vel_fine_grained= torch.linalg.vector_norm(target_velocity[:, 3:], ord=1, dim=-1)
+        # base_lin_vel_fine_grained= torch.linalg.vector_norm(self._robot.data.root_lin_vel_b, ord=1, dim=-1)
+        # base_ang_vel_fine_grained= torch.linalg.vector_norm(self._robot.data.root_ang_vel_b, ord=1, dim=-1)
+        # Huber loss
+        # delta=0.05
+        # target_lin_vel_fine_grained = F.huber_loss(target_velocity[:, :3], torch.zeros_like(target_velocity[:, :3]), delta=delta, reduction='none').sum(dim=-1)
+        # target_ang_vel_fine_grained= F.huber_loss(target_velocity[:, 3:], torch.zeros_like(target_velocity[:, 3:]), delta=delta, reduction='none').sum(dim=-1)
+        # base_lin_vel_fine_grained= F.huber_loss(self._robot.data.root_lin_vel_b, torch.zeros_like(self._robot.data.root_lin_vel_b), delta=delta, reduction='none').sum(dim=-1)
+        # base_ang_vel_fine_grained= F.huber_loss(self._robot.data.root_ang_vel_b, torch.zeros_like(self._robot.data.root_ang_vel_b), delta=delta, reduction='none').sum(dim=-1)
+        # L0.5 Kernel to favour high gradients near 0.0
+        eps = 1e-6
+        target_lin_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(target_velocity[:, :3]) + eps), dim=-1)
+        target_ang_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(target_velocity[:, 3:]) + eps), dim=-1)
+        base_lin_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(self._robot.data.root_lin_vel_b) + eps), dim=-1)
+        base_ang_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(self._robot.data.root_ang_vel_b) + eps), dim=-1)
+
+        # Penalize acceleration to avoid oscillations in velocity
+        target_acc = self._target.data.body_com_acc_w[:, self._target_base_id, :].view(-1, 6)
+        target_lin_acc = target_acc[:, :3]
+        target_ang_acc = target_acc[:, 3:]
+        base_acc = self._robot.data.body_com_acc_w[:, self._base_id, :].view(-1, 6)
+        base_lin_acc = base_acc[:, :3]
+        base_ang_acc = base_acc[:, 3:]
+        # Compute reward term
+        target_lin_acc_penalty = torch.sum(torch.square(target_lin_acc), dim=-1)
+        target_ang_acc_penalty = torch.sum(torch.square(target_ang_acc), dim=-1)
+        base_lin_acc_penalty = torch.sum(torch.square(base_lin_acc), dim=-1)
+        base_ang_acc_penalty = torch.sum(torch.square(base_ang_acc), dim=-1)
 
         # Penalize arm to be far from default configuration.
         arm_dof_default_pos = self._robot.data.default_joint_pos[:, self._arm_joint_ids]
@@ -228,7 +290,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
         thruster_action_rate_penalty = torch.sum(torch.square(self.thruster_actions - self._previous_actions[:, 14:17]), dim=-1)
         torque_action_rate_penalty = torch.sum(torch.square(self.torque_actions - self._previous_actions[:, 17:20]), dim=-1)
         # Fuel consumption penalty
-        fuel_penalty = torch.norm(self._desired_thruster_forces[:, 0, :].view(-1, 3), p=1, dim=-1) + torch.norm(self._desired_reaction_torques[:, 0, :].view(-1, 3), p=1, dim=-1)
+        fuel_penalty = torch.norm(self._applied_thruster_forces[:, 0, :].view(-1, 3), p=1, dim=-1) + torch.norm(self._applied_reaction_torques[:, 0, :].view(-1, 3), p=1, dim=-1)
         
         # Collision penalty
         net_contact_forces = self._contact_sensor.data.net_forces_w_history
@@ -239,6 +301,14 @@ class AdrIsaaclabEnv(DirectRLEnv):
             "target_angular_vel": target_ang_vel_penalty * self.cfg.target_angular_vel_rew_scale * self.step_dt,
             "base_linear_velocity": base_linear_vel_penalty * self.cfg.base_linear_velocity_rew_scale * self.step_dt,
             "base_angular_velocity": base_angular_vel_penalty * self.cfg.base_angular_velocity_rew_scale * self.step_dt,
+            "target_linear_vel_fine_grained": target_lin_vel_fine_grained * self.cfg.target_lin_vel_fine_grained_rew_scale * self.step_dt,
+            "target_angular_vel_fine_grained": target_ang_vel_fine_grained * self.cfg.target_ang_vel_fine_grained_rew_scale * self.step_dt,
+            "base_linear_vel_fine_grained": base_lin_vel_fine_grained * self.cfg.base_lin_vel_fine_grained_rew_scale * self.step_dt,
+            "base_angular_vel_fine_grained": base_ang_vel_fine_grained * self.cfg.base_ang_vel_fine_grained_rew_scale * self.step_dt,
+            "target_lin_acc": target_lin_acc_penalty * self.cfg.target_lin_acc_rew_scale * self.step_dt,
+            "target_ang_acc": target_ang_acc_penalty * self.cfg.target_ang_acc_rew_scale * self.step_dt,
+            "base_lin_acc": base_lin_acc_penalty * self.cfg.base_lin_acc_rew_scale * self.step_dt,
+            "base_ang_acc": base_ang_acc_penalty * self.cfg.base_ang_acc_rew_scale * self.step_dt,
             "arm_deviation": arm_deviation_penalty * self.cfg.arm_deviation_rew_scale * self.step_dt,
             "joint_velocity": joint_vel_penalty * self.cfg.joint_velocity_rew_scale * self.step_dt,
             "joint_torque": joint_torque_penalty * self.cfg.joint_torque_rew_scale * self.step_dt,
@@ -263,7 +333,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
         collision = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._undesired_collision_body_ids], dim=-1), dim=1)[0] > 1.0, dim=1)
         # Check if robot has lost grip from target
         # An episode is done if a collision occurs, the robot loses grip from the target, or the episode length is exceeded
-        return collision, time_out # terminated, truncated
+        return collision, time_out  # terminated, truncated
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
@@ -289,8 +359,11 @@ class AdrIsaaclabEnv(DirectRLEnv):
         extras = dict()
         extras["Metrics/Target_Linear_Vel"] = torch.mean(self._target.data.root_link_vel_w[env_ids, :3].norm(dim=-1)).item()
         extras["Metrics/Target_Angular_Vel"] = torch.mean(self._target.data.root_link_vel_w[env_ids, 3:].norm(dim=-1)).item()
-        extras["Metrics/Base_Linear_Vel"] = torch.mean(self._robot.data.root_lin_vel_b[env_ids].norm(dim=-1)).item()
-        extras["Metrics/Base_Angular_Vel"] = torch.mean(self._robot.data.root_ang_vel_b[env_ids].norm(dim=-1)).item()
+        extras["Metrics/Base_Linear_Vel"] = torch.mean(self._robot.data.root_lin_vel_w[env_ids].norm(dim=-1)).item()
+        extras["Metrics/Base_Angular_Vel"] = torch.mean(self._robot.data.root_ang_vel_w[env_ids].norm(dim=-1)).item()
+        extras["Curriculum/Curriculum_Factor"] = self.curriculum_factor * 100.0 # Log curriculum factor as percentage for better interpretability
+        extras["Curriculum/Max_Lin_Vel"] = self.max_lin_vel
+        extras["Curriculum/Max_Ang_Vel"] = self.max_ang_vel
         self.extras["log"].update(extras)
 
         # -- Reset procedure --
@@ -319,20 +392,40 @@ class AdrIsaaclabEnv(DirectRLEnv):
         self._target.write_root_pose_to_sim(target_init_pose, env_ids)
         self._target.write_root_velocity_to_sim(target_init_vel, env_ids)
 
+        # Reset action tensors
+        self._target_joint_pos[env_ids] = self._robot.data.default_joint_pos[env_ids][:, self._arm_joint_ids].clone()
+        self._applied_thruster_forces[env_ids] = torch.zeros((len(env_ids), 1, 3), device=self.device)
+        self._applied_reaction_torques[env_ids] = torch.zeros((len(env_ids), 1, 3), device=self.device)
+        self._previous_actions[env_ids] = torch.zeros((len(env_ids), 20), device=self.device)
+
     def update_target_motion(self, step: int = 0):
         inject_motion_idx = (self.episode_length_buf == step).float()  # Inject a new random target velocity shortly after the beginning of each episode after reset
         env_ids = torch.nonzero(inject_motion_idx, as_tuple=False).squeeze(-1)
         if len(env_ids) == 0:
             return
         else:
-            r = torch.empty(len(env_ids), device=self.device) # tensor for sampling
+            # Curriculum math
+            self.curriculum_factor = min(1.0, self.global_step_counter / self.max_curriculum_steps)
+            self.max_lin_vel = self.cfg.max_target_lin_vel * self.curriculum_factor
+            self.max_ang_vel = self.cfg.max_target_ang_vel * self.curriculum_factor
+            r = torch.empty(len(env_ids), device=self.device)   # tensor for sampling
             target_init_vel = torch.zeros((len(env_ids), 6), device=self.device)
-            target_init_vel[:, 0] = r.uniform_(self.cfg.target_lin_vel_ranges["x"][0], self.cfg.target_lin_vel_ranges["x"][1])
-            target_init_vel[:, 1] = r.uniform_(self.cfg.target_lin_vel_ranges["y"][0], self.cfg.target_lin_vel_ranges["y"][1])
-            target_init_vel[:, 2] = r.uniform_(self.cfg.target_lin_vel_ranges["z"][0], self.cfg.target_lin_vel_ranges["z"][1])
-            target_init_vel[:, 3] = r.uniform_(self.cfg.target_ang_vel_ranges["roll"][0], self.cfg.target_ang_vel_ranges["roll"][1])
-            target_init_vel[:, 4] = r.uniform_(self.cfg.target_ang_vel_ranges["pitch"][0], self.cfg.target_ang_vel_ranges["pitch"][1])
-            target_init_vel[:, 5] = r.uniform_(self.cfg.target_ang_vel_ranges["yaw"][0], self.cfg.target_ang_vel_ranges["yaw"][1])
+
+            # Compute target velocity
+            if self.max_lin_vel == 0.0:
+                target_init_vel[:, :3] = self._robot.data.root_lin_vel_w[env_ids]
+            else:
+                target_init_vel[:, 0] = (2.0 * r.uniform_() - 1.0) * self.max_lin_vel  # sample from [-max, max]
+                target_init_vel[:, 1] = (2.0 * r.uniform_() - 1.0) * self.max_lin_vel
+                target_init_vel[:, 2] = (2.0 * r.uniform_() - 1.0) * self.max_lin_vel
+            if self.max_ang_vel == 0.0:
+                target_init_vel[:, 3:] = self._robot.data.root_ang_vel_w[env_ids]
+            else:
+                target_init_vel[:, 3] = (2.0 * r.uniform_() - 1.0) * self.max_ang_vel
+                target_init_vel[:, 4] = (2.0 * r.uniform_() - 1.0) * self.max_ang_vel
+                target_init_vel[:, 5] = (2.0 * r.uniform_() - 1.0) * self.max_ang_vel
+            
+            # Apply velocity to sim
             self._target.write_root_velocity_to_sim(target_init_vel, env_ids)
 
 

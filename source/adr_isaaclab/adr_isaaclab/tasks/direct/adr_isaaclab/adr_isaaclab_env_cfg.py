@@ -40,7 +40,7 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     policy_dt = physics_dt * decimation
     episode_length_s = 20.0
     # - spaces definition
-    action_space = 14+3+3  # 7 dof per arm + thruster commands + torque commands
+    action_space = 14 + 3 + 3  # 7 dof per arm + thruster commands + torque commands
     observation_space = 66
     state_space = 0
     debug_vis = False
@@ -81,8 +81,8 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(
             lin_vel=(0.0, 0.0, 0.0),
-            ang_vel=(0.0, 0.0, 0.0), 
-            pos=(0.44581, 0.00206, -0.03), 
+            ang_vel=(0.0, 0.0, 0.0),
+            pos=(0.44581, 0.00206, -0.03),
             rot=(1.0, 0.0, 0.0, 0.0),
         ),
     )
@@ -90,9 +90,10 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
     # -- Action Parameters --
-    arm_action_scale = 0.05
+    arm_action_scale = 0.0      # 0.015
     thruster_scale = 10.0
     torque_scale = 5.0
+    thruster_time_constant = 0.05
 
     # -- Command parameters --
     default_ee_pos_left_offset = (0.45, 0.2345, 0.0)
@@ -101,30 +102,38 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     default_ee_rot_right_offset = (-1.57, 3.14, 0.0)
 
     # Capture velocity ranges
-    target_lin_vel_ranges = {
-        "x": (-0.0, 0.0),  # m/s
-        "y": (-0.0, 0.0),  # m/s
-        "z": (-0.0, 0.0),  # m/s
-    }
-    target_ang_vel_ranges = {
-        "roll": (-0.0, 0.0),  # rad/s
-        "pitch": (-0.0, 0.0),  # rad/s
-        "yaw": (-0.0, 0.0),  # rad/s
-    }
+    max_curriculum_factor = 0.7  # Reach max vel at 70% of the total training steps
+    max_target_lin_vel = 0.0
+    max_target_ang_vel = 0.05
 
     # -- Reward parameters --
     # - reward scales
     # Task rewards
-    target_linear_vel_rew_scale = 2.0
+    lin_rew_sigma = 0.05    # 0.1
+    ang_rew_sigma = 0.1    # 0.25
+    target_linear_vel_rew_scale = 5.0
     target_angular_vel_rew_scale = 5.0
-    base_linear_velocity_rew_scale = 2.0
-    base_angular_velocity_rew_scale = 4.0
+    base_linear_velocity_rew_scale = 5.0
+    base_angular_velocity_rew_scale = 5.0
     # Regularization rewards
-    arm_deviation_rew_scale = -1.0 #-1.0
-    joint_velocity_rew_scale = -1e-2
-    joint_torque_rew_scale = -1e-4
-    arm_action_rate_rew_scale = -5e-2 #-5e-2
-    thruster_action_rate_rew_scale = -1e-2 #-1e-3
-    torque_action_rate_rew_scale = -1e-2
-    fuel_consumption_rew_scale = 0.0 #-1e-2
+    # Fine-grained tracking rewards
+    target_lin_vel_fine_grained_rew_scale = -0.5
+    target_ang_vel_fine_grained_rew_scale = -0.5
+    base_lin_vel_fine_grained_rew_scale = -0.5
+    base_ang_vel_fine_grained_rew_scale = -0.5
+    # Acceleration penalties
+    target_lin_acc_rew_scale = -0.05
+    target_ang_acc_rew_scale = -0.05
+    base_lin_acc_rew_scale = -0.05
+    base_ang_acc_rew_scale = -0.05
+    # Joint-level rewards
+    arm_deviation_rew_scale = -0.1  # -1.0
+    joint_velocity_rew_scale = -1e-3
+    joint_torque_rew_scale = -1e-5
+    # Action rate rewards
+    arm_action_rate_rew_scale = -5e-2  # -5e-2
+    thruster_action_rate_rew_scale = -0.5    # -5e-1
+    torque_action_rate_rew_scale = -0.5  # -5e-1
+    # Fuel consumption reward
+    fuel_consumption_rew_scale = -0.0  # -1e-2
     collision_rew_scale = -100.0
