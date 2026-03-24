@@ -54,7 +54,7 @@ KINOVA_BIMANUAL_CFG = ArticulationCfg(
                 ".*joint_4": 39.0,
             },
             velocity_limit_sim=1.39, #rad/s
-            stiffness=20.0,
+            stiffness=40.0,
             damping=1.0,
         ),
         "small": ImplicitActuatorCfg(
@@ -65,7 +65,7 @@ KINOVA_BIMANUAL_CFG = ArticulationCfg(
                 ".*joint_7": 13.0,
             },
             velocity_limit_sim=1.22, #rad/s
-            stiffness=5.0,
+            stiffness=15.0,
             damping=0.5,
         ),
         "gripper": ImplicitActuatorCfg(
