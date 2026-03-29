@@ -94,6 +94,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
                 "arm_deviation",
                 "joint_velocity",
                 "joint_torque",
+                "action_magnitude",
                 "arm_action_rate",
                 "thruster_action_rate",
                 "torque_action_rate",
@@ -284,6 +285,8 @@ class AdrIsaaclabEnv(DirectRLEnv):
         joint_vel_penalty = torch.sum(torch.square(self.joint_vel), dim=-1)
         # Joint torque penalty to encourage low-effort motions - we can approximate torque with velocity for simplicity since we don't have access to torques in the environment
         joint_torque_penalty = torch.sum(torch.square(self._robot.data.applied_torque[:, self._arm_joint_ids]), dim=-1)
+        # Penalize absolute actions to avoid continuous oscillations
+        action_magnitude_penalty = torch.sum(torch.square(self.arm_actions), dim=-1)
         # Action rate penalty to encourage smoother actions by penalizing large changes in actions between steps
         arm_action_rate_penalty = torch.sum(torch.square(self.arm_actions - self._previous_actions[:, :14]), dim=-1)
         # Action rate penalty for thruster and torque commands
@@ -312,6 +315,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
             "arm_deviation": arm_deviation_penalty * self.cfg.arm_deviation_rew_scale * self.step_dt,
             "joint_velocity": joint_vel_penalty * self.cfg.joint_velocity_rew_scale * self.step_dt,
             "joint_torque": joint_torque_penalty * self.cfg.joint_torque_rew_scale * self.step_dt,
+            "action_magnitude": action_magnitude_penalty * self.cfg.action_magnitude_rew_scale * self.step_dt,
             "arm_action_rate": arm_action_rate_penalty * self.cfg.arm_action_rate_rew_scale * self.step_dt,
             "thruster_action_rate": thruster_action_rate_penalty * self.cfg.thruster_action_rate_rew_scale * self.step_dt,
             "torque_action_rate": torque_action_rate_penalty * self.cfg.torque_action_rate_rew_scale * self.step_dt,

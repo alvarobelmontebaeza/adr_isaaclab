@@ -90,7 +90,7 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
     # -- Action Parameters --
-    arm_action_scale = 0.0      # 0.015
+    arm_action_scale = 0.01      # 0.015
     thruster_scale = 10.0
     torque_scale = 5.0
     thruster_time_constant = 0.05
@@ -128,12 +128,13 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     base_ang_acc_rew_scale = -0.05
     # Joint-level rewards
     arm_deviation_rew_scale = -0.1  # -1.0
-    joint_velocity_rew_scale = -1e-3
-    joint_torque_rew_scale = -1e-5
+    joint_velocity_rew_scale = -1e-1
+    joint_torque_rew_scale = -1e-3
     # Action rate rewards
-    arm_action_rate_rew_scale = -5e-2  # -5e-2
+    action_magnitude_rew_scale = -0.5 # -1.0
+    arm_action_rate_rew_scale = -1.0  # -5e-2
     thruster_action_rate_rew_scale = -0.5    # -5e-1
     torque_action_rate_rew_scale = -0.5  # -5e-1
     # Fuel consumption reward
-    fuel_consumption_rew_scale = -0.0  # -1e-2
+    fuel_consumption_rew_scale = -0.05  # -1e-2
     collision_rew_scale = -100.0
