@@ -261,8 +261,8 @@ class AdrIsaaclabEnv(DirectRLEnv):
         eps = 1e-6
         target_lin_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(target_velocity[:, :3]) + eps), dim=-1)
         target_ang_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(target_velocity[:, 3:]) + eps), dim=-1)
-        base_lin_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(self._robot.data.root_lin_vel_b) + eps), dim=-1)
-        base_ang_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(self._robot.data.root_ang_vel_b) + eps), dim=-1)
+        base_lin_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(base_velocity[:, :3]) + eps), dim=-1)
+        base_ang_vel_fine_grained = torch.sum(torch.sqrt(torch.abs(base_velocity[:, 3:]) + eps), dim=-1)
 
         # Penalize acceleration to avoid oscillations in velocity
         target_acc = self._target.data.body_com_acc_w[:, self._target_base_id, :].view(-1, 6)
