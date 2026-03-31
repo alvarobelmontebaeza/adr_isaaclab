@@ -147,8 +147,8 @@ class AdrIsaaclabEnv(DirectRLEnv):
         self._actions = actions.clone()
         # Parse actions to be: [target_joint_pos, thruster_commands, torque_commands]
         self.arm_actions = self._actions[:, :14]
-        self.thruster_actions = self._actions[:, 14:14 + 3]
-        self.torque_actions = self._actions[:, 14 + 3:]
+        self.thruster_actions = self._actions[:, 14:17]
+        self.torque_actions = self._actions[:, 17:]
         # apply scaling and add to default joint positions to obtain processed actions as target joint positions
         # Residual Joint Control
         self._target_joint_pos = self.arm_actions * self._arm_action_scale + self._robot.data.default_joint_pos[:, self._arm_joint_ids]
@@ -183,7 +183,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
         self._previous_actions = self._actions.clone()
 
         # Get current robot rotation in world frame
-        base_rot_w = self._robot.data.root_link_pose_w[:, 3:] # [num_envs, 4] quaternion (w, x, y, z)
+        base_rot_w = self._robot.data.root_link_pose_w[:, 3:]   # [num_envs, 4] quaternion (w, x, y, z)
         # Obtain conjugate of base rotation to transform target velocities from world frame to body frame
         base_rot_w_conj = quat_conjugate(base_rot_w)    
 
@@ -208,7 +208,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
         self.joint_vel = self._robot.data.joint_vel[:, self._arm_joint_ids]
 
         # Get current EE poses
-        self.update_current_ee_poses() # Retrieves current EE poses in world frame and converts to base frame
+        self.update_current_ee_poses()  # Retrieves current EE poses in world frame and converts to base frame
                 
         # Last actions
         actions = self._previous_actions

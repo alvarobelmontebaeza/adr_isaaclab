@@ -122,8 +122,8 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     base_lin_vel_fine_grained_rew_scale = -0.5
     base_ang_vel_fine_grained_rew_scale = -0.5
     # Acceleration penalties
-    target_lin_acc_rew_scale = -0.05
-    target_ang_acc_rew_scale = -0.05
+    target_lin_acc_rew_scale = -0.075
+    target_ang_acc_rew_scale = -0.075
     base_lin_acc_rew_scale = -0.05
     base_ang_acc_rew_scale = -0.05
     # Joint-level rewards
