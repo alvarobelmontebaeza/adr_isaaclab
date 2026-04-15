@@ -213,7 +213,7 @@ class AdrIsaaclabEnv(DirectRLEnv):
         # Last actions
         actions = self._previous_actions
 
-        obs = torch.cat(
+        policy_obs = torch.cat(
             (
                 target_lin_vel_b, #3
                 target_ang_vel_b, #3
@@ -226,10 +226,9 @@ class AdrIsaaclabEnv(DirectRLEnv):
             ),
             dim=-1, # Total: 54
         )
-
         # TODO: Consider adding asymmetrics actor-critic
 
-        observations = {"policy": obs}
+        observations = {"policy": policy_obs}
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
@@ -384,7 +383,8 @@ class AdrIsaaclabEnv(DirectRLEnv):
         # Reset target state
         # pose
         target_init_pose = torch.zeros((len(env_ids), 7), device=self.device)
-        target_init_pose[:, :3] = torch.tensor(self.cfg.target_cfg.init_state.pos, device=self.device)
+        target_init_pose[:, :3] = torch.tensor(self.cfg.target_cfg.init_state.pos, device=self.device) 
+        target_init_pose[:, :3] += self.scene.env_origins[env_ids]
         target_init_pose[:, 3:7] = torch.tensor(self.cfg.target_cfg.init_state.rot, device=self.device)
         # velocity
         target_init_vel = torch.zeros((len(env_ids), 6), device=self.device)
