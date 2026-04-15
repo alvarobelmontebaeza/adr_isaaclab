@@ -12,24 +12,25 @@ from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
 from isaaclab.sensors import ContactSensorCfg
 from isaaclab.managers import EventTermCfg as EventTerm
+from isaaclab.managers import SceneEntityCfg
 
 
 
 from adr_isaaclab.assets.adr import KINOVA_BIMANUAL_CFG
 
-# @configclass
-# class EventCfg:
-#     """Configuration for randomization."""
+@configclass
+class EventCfg:
+    """Configuration for randomization."""
 
-#     add_base_mass = EventTerm(
-#         func=mdp.randomize_rigid_body_mass,
-#         mode="startup",
-#         params={
-#             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
-#             "mass_distribution_params": (0.0, 5.0),
-#             "operation": "add",
-#         },
-#     )
+    add_base_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("target", body_names=".*Target"),
+            "mass_distribution_params": (-10.0, 10.0),
+            "operation": "add",
+        },
+    )
 
 
 @configclass
@@ -89,6 +90,9 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
     # scene
     scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
+    # Events
+    events: EventCfg = EventCfg()
+
     # -- Action Parameters --
     arm_action_scale = 0.01      # 0.015
     thruster_scale = 10.0
@@ -103,8 +107,8 @@ class AdrIsaaclabEnvCfg(DirectRLEnvCfg):
 
     # Capture velocity ranges
     max_curriculum_factor = 0.7  # Reach max vel at 70% of the total training steps
-    max_target_lin_vel = 0.0
-    max_target_ang_vel = 0.05
+    max_target_lin_vel = 0.15
+    max_target_ang_vel = 0.15
 
     # -- Reward parameters --
     # - reward scales
