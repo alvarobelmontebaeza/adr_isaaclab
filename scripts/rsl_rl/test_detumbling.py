@@ -77,29 +77,57 @@ from isaaclab_rl.rsl_rl import (
     export_policy_as_onnx,
 )
 from isaaclab_tasks.utils import get_checkpoint_path
+from isaaclab.utils.math import euler_xyz_from_quat
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from rsl_rl.runners import DistillationRunner, OnPolicyRunner
 
 import matplotlib.pyplot as plt
 
-def plot_velocity(velocity_buff, title):
+def plot_pose(pos_buff, rot_buff, title, dt=0.02):
+    num_steps = pos_buff.shape[0]
+    time_axis = [i * dt for i in range(num_steps)]
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 1, 1)
     plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
-    plt.plot(velocity_buff[:, :3].cpu().numpy())
-    # plt.ylim(bottom=-0.1, top=0.1)
+    plt.plot(time_axis, pos_buff.cpu().numpy())
+    plt.title(f"{title} Position")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Position (m)")
+    plt.legend(["X", "Y", "Z"])
+    plt.grid()
+    plt.subplot(2, 1, 2)
+    plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
+    plt.plot(time_axis, rot_buff.cpu().numpy())
+    plt.title(f"{title} Orientation")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Orientation (rad)")
+    plt.legend(["Roll", "Pitch", "Yaw"])
+    plt.grid()
+    plt.tight_layout()
+    plt.show()
+
+def plot_velocity(velocity_buff, title, dt=0.02, ylim=0.04):
+    num_steps = velocity_buff.shape[0]
+    time_axis = [i * dt for i in range(num_steps)]
+    plt.figure(figsize=(12, 6))
+    plt.subplot(2, 1, 1)
+    plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
+    plt.plot(time_axis, velocity_buff[:, :3].cpu().numpy())
+    if ylim is not None:
+        plt.ylim(bottom=-ylim, top=ylim)
     plt.title(f"{title} Linear Velocity")
-    plt.xlabel("Timestep")
+    plt.xlabel("Time (s)")
     plt.ylabel("Linear Velocity (m/s)")
     plt.legend(["X", "Y", "Z"])
     plt.grid()
 
     plt.subplot(2, 1, 2)
     plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
-    plt.plot(velocity_buff[:, 3:].cpu().numpy())
+    plt.plot(time_axis, velocity_buff[:, 3:].cpu().numpy())
     plt.title(f"{title} Angular Velocity")
-    # plt.ylim(bottom=-0.1, top=0.1)
-    plt.xlabel("Timestep")
+    if ylim is not None:
+        plt.ylim(bottom=-ylim, top=ylim)
+    plt.xlabel("Time (s)")
     plt.ylabel("Angular Velocity (rad/s)")
     plt.legend(["Roll", "Pitch", "Yaw"])
     plt.grid()
@@ -107,22 +135,24 @@ def plot_velocity(velocity_buff, title):
     plt.tight_layout()
     plt.show()
 
-def plot_base_forces(thruster_cmd_buff, torque_cmd_buff):
+def plot_base_forces(thruster_cmd_buff, torque_cmd_buff, dt=0.02):
+    num_steps = thruster_cmd_buff.shape[0]
+    time_axis = [i * dt for i in range(num_steps)]
     plt.figure(figsize=(12, 6))
     plt.subplot(2, 1, 1)
     plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
-    plt.plot(thruster_cmd_buff.cpu().numpy())
+    plt.plot(time_axis, thruster_cmd_buff.cpu().numpy())
     plt.title("Thruster Commands")
-    plt.xlabel("Timestep")
+    plt.xlabel("Time (s)")
     plt.ylabel("Thruster Force (N)")
     plt.legend(["X", "Y", "Z"])
     plt.grid()
 
     plt.subplot(2, 1, 2)
     plt.gca().set_prop_cycle('color', ['red', 'green', 'blue'])
-    plt.plot(torque_cmd_buff.cpu().numpy())
+    plt.plot(time_axis, torque_cmd_buff.cpu().numpy())
     plt.title("Reaction Torque Commands")
-    plt.xlabel("Timestep")
+    plt.xlabel("Time (s)")
     plt.ylabel("Torque (Nm)")
     plt.legend(["Roll", "Pitch", "Yaw"])
     plt.grid()
@@ -232,6 +262,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     timestep = 0
 
     # Buffers for logging
+    target_pos_buff = torch.zeros((env.num_envs, env.unwrapped.max_episode_length, 3)) #
+    target_rot_buff = torch.zeros((env.num_envs, env.unwrapped.max_episode_length, 3)) #
     target_vel_buff = torch.zeros((env.num_envs, env.unwrapped.max_episode_length, 6))  # [num_envs, max_episode_length, [linear_vel, angular_vel]]
     base_vel_buff = torch.zeros((env.num_envs, env.unwrapped.max_episode_length, 6)) # [num_envs, max_episode_length, [linear_vel, angular_vel
     thruster_cmd_buff = torch.zeros((env.num_envs, env.unwrapped.max_episode_length, 3)) # [num_envs, max_episode_length, 3] for logging thruster commands
@@ -250,6 +282,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             policy_nn.reset(dones)
 
             # Data logging for debugging and analysis
+            target_pos_buff[:, timestep, :] = env.unwrapped._target.data.root_link_pose_w[:, :3]
+            target_euler_x, target_euler_y, target_euler_z = euler_xyz_from_quat(env.unwrapped._target.data.root_link_pose_w[:, 3:])
+            target_rot_euler = torch.stack((target_euler_x, target_euler_y, target_euler_z), dim=-1)
+            target_rot_buff[:, timestep, :] = target_rot_euler
             target_vel_buff[:, timestep, :3] = env.unwrapped._target.data.root_link_vel_w[:, :3]
             target_vel_buff[:, timestep, 3:] = env.unwrapped._target.data.root_link_vel_w[:, 3:]
             base_vel_buff[:, timestep, :3] = env.unwrapped._robot.data.root_link_vel_w[:, :3]
@@ -275,14 +311,30 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
 
+    # Plot data for debugging and analysis
+    if env.num_envs == 1:
+        plot_pose(target_pos_buff[0, :, :], target_rot_buff[0, :, :], title="Target Satellite")
+        plot_velocity(target_vel_buff[0, :, :], title="Target Satellite", ylim=None)
+        plot_velocity(base_vel_buff[0, :, :], title="Chaser Robot")
+        plot_base_forces(thruster_cmd_buff[0, :, :], torque_cmd_buff[0, :, :])
+    else:
+        mean_target_lin_vel_error = torch.mean(torch.norm(target_vel_buff[:, -5, :3], dim=-1), dim=0)
+        std_target_lin_vel_error = torch.std(torch.norm(target_vel_buff[:, -5, :3], dim=-1), dim=0)
+        mean_target_ang_vel_error = torch.mean(torch.norm(target_vel_buff[:, -5, 3:], dim=-1), dim=0)
+        std_target_ang_vel_error = torch.std(torch.norm(target_vel_buff[:, -5, 3:], dim=-1), dim=0)
+        print(f"Mean target linear velocity error: {mean_target_lin_vel_error} +- {std_target_lin_vel_error}")
+        print(f"Mean target angular velocity error: {mean_target_ang_vel_error} +- {std_target_ang_vel_error}")
+
+        mean_base_lin_vel_error = torch.mean(torch.norm(base_vel_buff[:, -5, :3], dim=-1), dim=0)
+        std_base_lin_vel_error = torch.std(torch.norm(base_vel_buff[:, -5, :3], dim=-1), dim=0)
+        mean_base_ang_vel_error = torch.mean(torch.norm(base_vel_buff[:, -5, 3:], dim=-1), dim=0)
+        std_base_ang_vel_error = torch.std(torch.norm(base_vel_buff[:, -5, 3:], dim=-1), dim=0)
+        print(f"Mean base linear velocity error: {mean_base_lin_vel_error} +- {std_base_lin_vel_error}")
+        print(f"Mean base angular velocity error: {mean_base_ang_vel_error} +- {std_base_ang_vel_error}")   
+    
+    
     # close the simulator
     env.close()
-
-    # Plot data for debugging and analysis
-    plot_velocity(target_vel_buff[0, :, :], title="Target Satellite")
-    plot_velocity(base_vel_buff[0, :, :], title="Chaser Robot")
-    plot_base_forces(thruster_cmd_buff[0, :, :], torque_cmd_buff[0, :, :])
-
 
 
 if __name__ == "__main__":
